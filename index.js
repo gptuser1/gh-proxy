@@ -6,6 +6,9 @@
 const ASSET_URL = 'https://hunshcn.github.io/gh-proxy/'
 // 前缀，如果自定义路由为example.com/gh/*，将PREFIX改为 '/gh/'，注意，少一个杠都会错！
 const PREFIX = '/'
+// 访问令牌：代理路径需携带此令牌（放在 URL 路径前缀），如 https://domain/<TOKEN>/https://github.com/...
+// 部署时通过环境变量 AUTH_TOKEN 注入到 globalThis；留空则关闭认证。
+const AUTH_TOKEN = (typeof globalThis !== 'undefined' && globalThis.AUTH_TOKEN) || ''
 // 分支文件使用jsDelivr镜像的开关，0为关闭，默认关闭
 const Config = {
     jsdelivr: 0
@@ -79,10 +82,17 @@ async function fetchHandler(e) {
     const urlObj = new URL(urlStr)
     let path = urlObj.searchParams.get('q')
     if (path) {
-        return Response.redirect('https://' + urlObj.host + PREFIX + path, 301)
+        return Response.redirect('https://' + urlObj.host + PREFIX + AUTH_TOKEN + '/' + path, 301)
     }
     // cfworker 会把路径中的 `//` 合并成 `/`
     path = urlObj.href.slice(urlObj.origin.length + PREFIX.length).replace(/^https?:\/+/, 'https://')
+    if (AUTH_TOKEN) {
+        // 请求路径必须带 token 前缀，否则未授权
+        if (!path.startsWith(AUTH_TOKEN + '/')) {
+            return makeRes('Unauthorized', 401)
+        }
+        path = path.slice(AUTH_TOKEN.length + 1)
+    }
     if (path.search(exp1) === 0 || path.search(exp5) === 0 || path.search(exp6) === 0 || path.search(exp3) === 0) {
         return httpHandler(req, path)
     } else if (path.search(exp2) === 0) {
